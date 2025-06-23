@@ -48,15 +48,30 @@ if st.sidebar.button('Train Model'):
     optimizer.save(MODEL_PATH)
     st.sidebar.success('Model trained and saved')
 
-# Optimization button
+# Optimization button with improved table
 if st.sidebar.button('Optimize Route'):
+    # Prepare data for GNN
     data = Data(
         x=torch.tensor(df[['latitude','longitude','cluster']].values, dtype=torch.float),
         edge_index=torch.tensor([[0],[1]], dtype=torch.long)
     )
-    pred = optimizer.predict(data)
-    st.write('Predicted optimized travel times:', pred.view(-1).numpy())
+    # Get predictions
+    pred = optimizer.predict(data).view(-1).numpy()
+
+    # Build results DataFrame
+    results = df[['address', 'travel_time']].copy()
+    results = results.rename(columns={'travel_time': 'original_time'})
+    results['optimized_time'] = pred
+
+    # Display results table
+    st.header('Optimization Results')
+    st.dataframe(results)
+
+    # Map visualization with popups
     m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=12)
-    for _, row in df.iterrows():
-        folium.Marker([row['latitude'], row['longitude']], popup=row.get('address', '')).add_to(m)
+    for idx, row in df.iterrows():
+        folium.Marker(
+            [row['latitude'], row['longitude']],
+            popup=f"{row['address']}\nOriginal: {row['travel_time']}m\nOptimized: {results.loc[idx, 'optimized_time']:.1f}m"
+        ).add_to(m)
     folium_static(m)
