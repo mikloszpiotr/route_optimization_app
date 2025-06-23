@@ -23,14 +23,18 @@ df = normalize_addresses(df)
 df = cluster_geolocations(df)
 df = analyze_traffic_patterns(df)
 
+# Styled Data Preview
 st.header('Data Preview')
-st.dataframe(df[['address','latitude','longitude','travel_time','cluster']].rename(
+preview = df[['address','latitude','longitude','travel_time','cluster']].rename(
     columns={'travel_time':'original_time'}
-).style.format({
-    'latitude':'{:.4f}', 
-    'longitude':'{:.4f}', 
-    'original_time':'{:.2f}'
-}))
+)
+st.dataframe(
+    preview.style.format({
+        'latitude':'{:.4f}',
+        'longitude':'{:.4f}',
+        'original_time':'{:.2f}'
+    })
+)
 
 # Load or initialize model
 if 'optimizer' not in st.session_state:
@@ -41,44 +45,41 @@ if 'optimizer' not in st.session_state:
     except FileNotFoundError:
         st.sidebar.warning('No pre-trained model found; please train.')
     st.session_state.optimizer = optimizer
-
 optimizer = st.session_state.optimizer
 
-# Train model button
+# Training button
 if st.sidebar.button('Train Model'):
-    data = Data(
+    graph_data = Data(
         x=torch.tensor(df[['latitude','longitude','cluster']].values, dtype=torch.float),
         edge_index=torch.tensor([[0],[1]], dtype=torch.long),
         y=torch.tensor(df['travel_time'].values, dtype=torch.float)
     )
-    optimizer.train(data)
+    optimizer.train(graph_data)
     optimizer.save(MODEL_PATH)
     st.sidebar.success('Model trained and saved')
 
-# Optimize route button with enhanced results
+# Optimization & Results
 if st.sidebar.button('Optimize Route'):
-    # Prepare graph data
-    data = Data(
+    graph_data = Data(
         x=torch.tensor(df[['latitude','longitude','cluster']].values, dtype=torch.float),
         edge_index=torch.tensor([[0],[1]], dtype=torch.long)
     )
-    pred = optimizer.predict(data).view(-1).numpy()
+    pred = optimizer.predict(graph_data).view(-1).numpy()
 
-    # Combine into DataFrame
     results = pd.DataFrame({
         'address': df['address'],
         'original_time': df['travel_time'].round(2),
         'optimized_time': pred.round(2)
     })
 
-    # Display formatted results table
     st.header('Optimization Results')
-    st.dataframe(results.style.format({
-        'original_time':'{:.2f}',
-        'optimized_time':'{:.2f}'
-    }))
+    st.dataframe(
+        results.style.format({
+            'original_time':'{:.2f}',
+            'optimized_time':'{:.2f}'
+        })
+    )
 
-    # Map with popups showing both times
     m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=12)
     for idx, row in df.iterrows():
         orig = results.loc[idx, 'original_time']
